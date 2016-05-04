@@ -15,6 +15,8 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import com.edmundo.pfseguridad.AES.AES;
 import com.edmundo.pfseguridad.Adapter.DividerItemDecoration;
 import com.edmundo.pfseguridad.Adapter.RVAdapter;
 import com.edmundo.pfseguridad.Model.Mensaje;
@@ -44,13 +46,14 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView recyclerView;
     public RVAdapter adapter;
     private RecyclerView.LayoutManager layoutManager;
+    private String mensajeRecibido;
+    private String mensajeEncriptado;
+    private String mensajeDesencriptado;
+    private String decrypted;
+    protected Mensaje mensajeNew;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
-        previousMessage = "";
-        theMessage = "";
-        theTotalMessage = "";
 
         pubnub = new Pubnub(PUBLISH_KEY, SUBSCRIBE_KEY);
         super.onCreate(savedInstanceState);
@@ -69,22 +72,9 @@ public class MainActivity extends AppCompatActivity {
         recyclerView.setAdapter(adapter);
 
         muestraMensaje = (TextView) findViewById(R.id.entradamensaje);
-        botonRefresh = (Button) findViewById(R.id.refresh);
-
-
-        System.out.println("jalando");
-
 
         Callback callback = new Callback() {
 
-            public String theMessage = "";
-            EditText texto;
-            //
-
-            public String getMessage(){
-
-                return theMessage;
-            }
             @Override
             public void connectCallback(String channel, Object message) {
                 System.out.println("SUBSCRIBE : CONNECT on channel:" + channel
@@ -110,12 +100,25 @@ public class MainActivity extends AppCompatActivity {
                 System.out.println("SUBSCRIBE : " + channel + " : "
                         + message.getClass() + " : " + message.toString());
                  //theMessage = message.toString();
+
                 jsonObject = (JSONObject) message;
                 try {
-                    setMessage(jsonObject.getString("mensaje"));
+                    mensajeRecibido = jsonObject.getString("mensaje");
+                    mensajeEncriptado = jsonObject.getString("encriptado");
+                    mensajeDesencriptado = jsonObject.getString("desencriptado");
+                    mensajeNew = new Mensaje("Usuario 1", mensajeDesencriptado, mensajeEncriptado);
+
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                             addToList(mensajeNew);
+                        }
+                    });
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
+
+
             }
 
             @Override
@@ -131,41 +134,6 @@ public class MainActivity extends AppCompatActivity {
             System.out.println(e.toString());
         }
 
-        hilo = new Thread(){
-
-            @Override
-            public void run() {
-
-
-                try{
-
-                    while (true)
-                    {
-                        //System.out.println("narucotoda");
-
-                        if (previousMessage.equals(theMessage) )
-                        {
-                            //System.out.println("narucotoda");
-                        }
-                        else
-                        {
-                            previousMessage = theMessage;
-                            theTotalMessage = theTotalMessage + "\n" + theMessage;
-                        }
-                    }
-
-
-                }catch (Exception e)
-                {
-                    System.out.println(e);
-                }
-
-            }
-
-        };
-
-        hilo.start();
-
         muestraMensaje.setOnEditorActionListener(new TextView.OnEditorActionListener() {
 
             @Override
@@ -175,18 +143,45 @@ public class MainActivity extends AppCompatActivity {
 
                     Callback callback = new Callback() {};
                     JSONObject mensajeNuevo = new JSONObject();
+                    String mensajeAEncriptar;
+                    String llave;
+                    String textoEncriptado = "";
+                    String textoDesencriptado;
 
+                    mensajeAEncriptar = muestraMensaje.getText().toString();
+                    llave = "hola como estas ";
+                    //llave = "meetmeatthetogap";
                     try {
-                        mensajeNuevo.put("mensaje", muestraMensaje.getText().toString());
-                    } catch (JSONException e) {
-                        System.out.println("Problema...");
+                        int valor;
+                        byte[] cipher = AES.encrypt(mensajeAEncriptar, llave);
+                        mensajeNuevo.put("mensaje", mensajeAEncriptar);
+
+
+                        for (int i=0; i<cipher.length; i++) {
+                            valor = cipher[i];
+                            if(valor < 0)
+                                valor = 256 + (cipher[i] % 256);
+                            textoEncriptado = textoEncriptado + Integer.toHexString(valor)  + " ";
+
+                        }
+
+                        mensajeNuevo.put("encriptado", textoEncriptado);
+
+                        textoDesencriptado = AES.decrypt(cipher, llave);
+                        mensajeNuevo.put("desencriptado", textoDesencriptado);
+
+
+
+                    } catch (Exception e) {
+                        e.printStackTrace();
                     }
 
                     pubnub.publish(CHANNEL, mensajeNuevo, callback);
-                    Mensaje mensajeNew = new Mensaje("Usuario 1", muestraMensaje.getText().toString(), "Aquí va el resultado del mensaje encriptado");
-                    addToList(mensajeNew);
+
+                   /* Mensaje mensajeNew = new Mensaje("Usuario 1", muestraMensaje.getText().toString(), "Aquí va el resultado del mensaje encriptado");
+                    addToList(mensajeNew);*/
                     Snackbar.make(v,"Mensaje enviado", Snackbar.LENGTH_LONG).setAction("Action", null).show();
-                    muestraMensaje.setText(null);
+                    muestraMensaje.setText("");
 
                     handled = true;
                 }
@@ -197,14 +192,14 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    public void refresh(View view)
+/*    public void refresh(View view)
     {
         muestraMensaje.setText(theTotalMessage);
     }
 
     public void setMessage(String string){
         theMessage = string;
-    }
+    }*/
 
 
     private void addToList(Mensaje mensajeItem) {
